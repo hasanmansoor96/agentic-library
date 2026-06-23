@@ -23,7 +23,12 @@ Before you build anything, ask me the following questions so you can configure t
 
 **About my content topic:**
 - What is the main topic or niche of my site? (e.g. gaming, travel, finance, fitness)
-- What are 20–40 seed keywords that represent my niche? These are the starting terms you'll use to discover related trending queries on Google Trends. (I can give you a list, or you can suggest some based on my topic.)
+- How should seed keywords be managed? Seeds are the starting terms used to discover related/trending queries on Google Trends. Two options:
+  - **Fixed rotation:** you give 20–40 seeds and the agent cycles through a batch each run.
+  - **Dynamic (good for fast-moving niches):** you give 1–2 broad anchor seeds that are searched every run; the agent auto-builds a small rotating list (e.g. top 5) from the anchors' own top related queries, so the seed set follows what's actually trending. (I can give you a list either way, or suggest some based on your topic.)
+
+**About the trends data:**
+- What time window should the Trends data use? **Past week** (freshest — best for breaking/news-driven niches), **past 3 months**, or **past 12 months** (smoother, established demand). This is fixed per schedule.
 
 **About where my content lives:**
 - Where are my published posts/articles stored? Options include:
@@ -54,9 +59,11 @@ Once I have your answers, I'll:
 
 - Adapt the content-fetching step to the user's source (Sanity GROQ query, WP REST API, sitemap scrape, file parse, etc.)
 - Google Trends scraping requires Chrome to be connected and signed in; warn the user if it isn't available at runtime
-- Space Trends requests 60–90 seconds apart — never burst, or Google will CAPTCHA-block the session
-- Use a rotation_state.json to cycle through seeds across runs rather than hitting all seeds every time
-- Save timestamped reports; never overwrite prior ones so the user can track changes week over week
+- **Read the Trends data with the `get_page_text` browser tool, NOT an in-page shadow-DOM walk.** Trends renders the "Related queries"/"Related topics" widgets inside *closed* shadow roots, so a script that walks `element.shadowRoot` silently returns zero rows. `get_page_text` reads through closed shadow roots via the accessibility tree; parse that text into the related-query structure.
+- Pin the time window in the explore URL with the `date` param (e.g. `date=now%207-d` for Past week, `date=today%203-m`, `date=today%2012-m`) and keep it consistent every run.
+- Space Trends requests 60–90 seconds apart — never burst, or Google will CAPTCHA-block the session. Keep the seed set per run small (≈7 pages max) so a run stays well under the limit.
+- For seed management, use a small state file (e.g. `seed_state.json`): either a fixed rotation pointer, or anchors + an auto-rebuilt rotating list. **If seeds are discovered dynamically, filter them to niche-relevant terms** — broad/generic anchors (e.g. anything with "news") pull in off-topic Breakout queries that would otherwise become junk seeds.
+- Save timestamped reports; never overwrite prior ones so the user can track changes week over week. Include the seed terms chosen for the next run in the report.
 - If Chrome isn't available during a run, fall back to the existing cached related_raw.json and note this in the summary
 
 ---
@@ -77,11 +84,15 @@ Libraries like `google-trends-api` (npm), `pyGTrends`, `serpapi`'s Trends module
 ### The Google Keyword Planner / Search Console APIs
 These provide search volume data but **not** the rising/related-query signal that makes this workflow useful. They also require OAuth credentials, a verified property, or ad account access — too much friction for a general setup.
 
+### In-page shadow-DOM scraping (`element.shadowRoot` walk)
+Reading the rendered widgets by walking the DOM through `element.shadowRoot` (the old `scrape_related.js` approach) **no longer works**. Trends renders the "Related queries"/"Related topics" widgets inside **closed** shadow roots, where `element.shadowRoot` returns `null`, so the walk traverses right past them and returns zero rows — with no error, which makes it look like throttling or empty data when it isn't. Do not build on this; use `get_page_text` instead (below).
+
 ### What actually works
-The only reliable method is rendering the Google Trends explore page inside a **real, signed-in Chrome browser** and reading the data from the rendered shadow DOM. This requires:
+The only reliable method is rendering the Google Trends explore page inside a **real, signed-in Chrome browser** and reading the rendered data with the **`get_page_text` browser tool**, then parsing that text. This requires:
 - Chrome connected to Cowork/Claude
 - The user signed into a Google account in that browser
-- Requests spaced 60–90 seconds apart to avoid throttling
-- A shadow-DOM scraper script (like `scrape_related.js` in this project) rather than any HTTP-level approach
+- The explore URL with the desired window pinned via `date=` (e.g. `date=now%207-d` for Past week)
+- Requests spaced 60–90 seconds apart to avoid throttling; a small seed set per run (≈7 pages max)
+- `get_page_text` (which reads through closed shadow roots via the accessibility tree) plus a small parser for the "Related queries"/"Related topics" sections — **not** an `element.shadowRoot` walk or any HTTP-level call
 
 If Chrome is unavailable, the run should fall back to cached data from the previous sweep rather than attempting any of the above alternatives.
