@@ -1,0 +1,21 @@
+# Core Google API client + auth
+# Used by: Search Console, GA4, AdSense
+google-api-python-client
+google-auth
+google-auth-httplib2
+
+# OAuth flow — AdSense only (no service-account support)
+google-auth-oauthlib
+
+# GA4 Data API client
+google-analytics-data
+
+# General HTTP — Bing Webmaster API, Reddit feeds
+requests
+
+# Markdown → HTML for weekly combined email (optional; has stdlib fallback)
+markdown
+
+# Note: CrUX / Core Web Vitals agent uses stdlib only — no extra packages needed.
+# Note: Keyword gap (Google Trends) and Bing portal scraping require the
+#       Claude in Chrome extension, not a Python package.
